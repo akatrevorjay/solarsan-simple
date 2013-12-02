@@ -112,6 +112,9 @@ class Dataset(_StorageChildBase):
         self.define_config_group_param('dataset', 'available', 'string', 'Available space', writable=False)
         self.define_config_group_param('dataset', 'creation', 'string', 'Creation date', writable=False)
 
+        self.define_config_group_param('dataset', 'reservation', 'string', 'Space reservation')
+        self.define_config_group_param('dataset', 'refreservation', 'string', 'Referenced space reservation')
+
     @classmethod
     def _find_subclass_for_type_mask(cls, type_mask):
         for scls in cls.__subclasses__():
