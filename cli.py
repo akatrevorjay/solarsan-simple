@@ -242,7 +242,6 @@ class Pool(Filesystem):
         self.define_config_group_param('pool', 'autoexpand', 'string', 'Automatically expand pool if drives increase in size')
         self.define_config_group_param('pool', 'autoreplace', 'string', 'Automatically replace failed drives with any specified hot spare(s)')
 
-        #self.define_config_group_param('pool', 'name', 'string', 'Pool Name', writable=False)
         self.define_config_group_param('pool', 'health', 'string', 'Health', writable=False)
         self.define_config_group_param('pool', 'dedupratio', 'string', 'Dedupe ratio', writable=False)
 
@@ -261,6 +260,34 @@ class Pool(Filesystem):
 
     def ui_command_destroy(self):
         """ Destroy Pool. """
+        # TODO Destroy pool
+        raise NotImplementedError()
+
+    def ui_command_attach(self):
+        """ Attach drive to Pool. """
+        # TODO List available disks, choose one
+        # TODO List available pool disks, choose one
+        # TODO Attach disk
+        raise NotImplementedError()
+
+    def ui_command_clear(self):
+        """ Clear errors on Pool. """
+        # TODO Clear Pool
+        raise NotImplementedError()
+
+    def ui_command_add(self):
+        """ Add drive to Pool. """
+        # TODO List available disks, choose one
+        raise NotImplementedError()
+
+    def ui_command_detach(self):
+        """ Detach drive from Pool mirror vdev. """
+        # TODO Detach drive
+        raise NotImplementedError()
+
+    def ui_command_iostat(self):
+        """ Show IO Statistics. """
+        # TODO IOstat
         raise NotImplementedError()
 
     """ Properties """
