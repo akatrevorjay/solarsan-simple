@@ -16,7 +16,7 @@ setup(
     maintainer='Trevor Joynson',
     maintainer_email='github@skywww.net',
     url='http://github.com/akatrevorjay/solarsan',
-    packages=['san'],
+    packages=['san', 'san.core', 'san.cli', 'san.networking', 'san.utils'],
     #use_2to3=True,
     entry_points=dict(
         console_scripts=['sancli=san.cli:main'],
