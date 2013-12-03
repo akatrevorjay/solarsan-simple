@@ -11,9 +11,6 @@ class Networking(ConfigNode):
             if ':' not in iface:
                 Interface(self, parent, iface)
 
-    def ui_child_interfaces(self):
-        return NetworkInterfaces()
-
 
 class Interface(ConfigNode):
     def __init__(self, parent, name):

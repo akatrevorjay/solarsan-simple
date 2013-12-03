@@ -20,7 +20,6 @@ def main():
     root_node = MySystemRoot(shell)
     shell.run_interactive()
 
-__main__ = main
 
 if __name__ == "__main__":
     __main__()

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import cli
+from san import cli
 
 
 if __name__ == '__main__':
