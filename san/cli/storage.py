@@ -3,12 +3,6 @@ from .base import ConfigNode
 from pyzfscore.zfs import ZPool, ZDataset, ZFilesystem, ZVolume, ZSnapshot
 
 
-class Storage(ConfigNode):
-    def __init__(self, parent):
-        ConfigNode.__init__(self, parent)
-        Pools(self)
-
-
 class Pools(ConfigNode):
     def __init__(self, parent):
         ConfigNode.__init__(self, parent)

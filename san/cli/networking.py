@@ -1,6 +1,7 @@
 
 
 from .base import ConfigNode
+from ..networking.config import Nic
 
 
 class Networking(ConfigNode):
@@ -9,7 +10,7 @@ class Networking(ConfigNode):
 
         for iface in Nic.list().keys():
             if ':' not in iface:
-                Interface(self, parent, iface)
+                Interface(self, iface)
 
 
 class Interface(ConfigNode):

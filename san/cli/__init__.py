@@ -3,21 +3,22 @@
 import configshell
 from .base import ConfigNode
 from .system import System
-from .storage import Storage
+from .storage import Pools
 from .networking import Networking
 
 
-class MySystemRoot(ConfigNode):
+class CLIRoot(ConfigNode):
     def __init__(self, shell):
         ConfigNode.__init__(self, shell=shell, name='/')
 
         System(self)
-        Storage(self)
+        Pools(self)
+        Networking(self)
 
 
 def main():
     shell = configshell.shell.ConfigShell('~/.myshell')
-    root_node = MySystemRoot(shell)
+    root_node = CLIRoot(shell)
     shell.run_interactive()
 
 
