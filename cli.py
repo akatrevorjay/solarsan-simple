@@ -115,6 +115,11 @@ class Dataset(_StorageChildBase):
         self.define_config_group_param('dataset', 'reservation', 'string', 'Space reservation')
         self.define_config_group_param('dataset', 'refreservation', 'string', 'Referenced space reservation')
 
+    def summary(self):
+        desc = '%s used=%s' % (self.dataset.type_name, self.dataset.props['used'])
+        health = True
+        return desc, health
+
     @classmethod
     def _find_subclass_for_type_mask(cls, type_mask):
         for scls in cls.__subclasses__():
@@ -207,6 +212,13 @@ class Volume(Dataset, _SnapshottableDataset):
         self.define_config_group_param('volume', 'volblocksize', 'string', 'Volume Block size', writable=False)
         self.define_config_group_param('volume', 'volsize', 'string', 'Volume Size')
 
+    def summary(self):
+        desc = '%s used=%s size=%s' % (self.dataset.type_name,
+                                       self.dataset.props['used'],
+                                       self.dataset.props['volsize'])
+        health = True
+        return desc, health
+
     # Volume config group
 
     def ui_getgroup_volume(self, key):
@@ -238,6 +250,14 @@ class Pool(Filesystem):
         self.define_config_group_param('pool', 'allocated', 'string', 'Allocated space', writable=False)
         self.define_config_group_param('pool', 'free', 'string', 'Free space', writable=False)
         self.define_config_group_param('pool', 'size', 'string', 'Total space', writable=False)
+
+    def summary(self):
+        desc = '%s %s/%s %s' % (self.pool.type_name,
+                             self.pool.props['free'],
+                             self.pool.props['size'],
+                             self.pool.props['capacity'])
+        health = str(self.pool.props['health']) == 'ONLINE'
+        return desc, health
 
     def ui_command_destroy(self):
         """ Destroy Pool. """
