@@ -1,45 +1,6 @@
-#!/usr/bin/env python
 
-import os
-import configshell
+from .base import ConfigNode
 from pyzfscore.zfs import ZPool, ZDataset, ZFilesystem, ZVolume, ZSnapshot
-
-
-class ConfigNode(configshell.node.ConfigNode):
-    def __init__(self, *args, **kwargs):
-        # Figure out name
-        name = kwargs.pop('name', None)
-        if not name:
-            name = getattr(self, 'name', None)
-        if not name:
-            name = self.__class__.__name__.lower()
-
-        # Create args list
-        cargs = [name]
-        cargs.extend(args)
-
-        configshell.node.ConfigNode.__init__(self, *cargs, **kwargs)
-
-
-class MySystemRoot(ConfigNode):
-    def __init__(self, shell):
-        ConfigNode.__init__(self, shell=shell, name='/')
-
-        System(self)
-        Storage(self)
-
-
-class Networking(ConfigNode):
-    pass
-
-
-class System(ConfigNode):
-    def __init__(self, parent):
-        ConfigNode.__init__(self, parent)
-
-    def ui_command_uptime(self):
-        """ uptime - Tell how long the system has been running. """
-        os.system("uptime")
 
 
 class Storage(ConfigNode):
@@ -301,10 +262,3 @@ class Pool(Filesystem):
         self.pool.props[key] = value
 
 
-def main():
-    shell = configshell.shell.ConfigShell('~/.myshell')
-    root_node = MySystemRoot(shell)
-    shell.run_interactive()
-
-if __name__ == "__main__":
-    main()
