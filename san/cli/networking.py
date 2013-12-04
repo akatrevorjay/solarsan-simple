@@ -1,19 +1,22 @@
 
 
 from .base import ConfigNode
-from ..networking.config import Nic
+from ..networking.config import Nic, list_ifaces
+import re
 
 
 class Networking(ConfigNode):
     def __init__(self, parent):
         ConfigNode.__init__(self, parent)
 
-        for iface in Nic.list().keys():
-            if ':' not in iface:
+        for iface in list_ifaces():
+            if not re.match(r':|^(lo|virbr)', iface):
                 Interface(self, iface)
 
 
 class Interface(ConfigNode):
+    _autosave = False
+
     def __init__(self, parent, name):
         self.obj = Nic(name)
         ConfigNode.__init__(self, parent, name=name)
@@ -44,29 +47,33 @@ class Interface(ConfigNode):
         else:
             return ('Unconfigured', False)
 
-    def ui_getgroup_interface(self, config):
+    def ui_getgroup_interface(self, key):
         '''
-        This is the backend method for getting configs.
-        @param config: The config to get the value of.
-        @type config: str
-        @return: The config's value
+        This is the backend method for getting keys.
+        @param key: The key to get the value of.
+        @type key: str
+        @return: The key's value
         @rtype: arbitrary
         '''
-        return getattr(self.obj.config, config)
+        return getattr(self.obj.config, key)
 
-    def ui_setgroup_interface(self, config, value):
+    def ui_setgroup_interface(self, key, value):
         '''
-        This is the backend method for setting configs.
-        @param config: The config to set the value of.
-        @type config: str
-        @param value: The config's value
+        This is the backend method for setting keys.
+        @param key: The key to set the value of.
+        @type key: str
+        @param value: The key's value
         @type value: arbitrary
         '''
-        setattr(self.obj.config, config, value)
+        setattr(self.obj.config, key, value)
+        if self._autosave:
+            self.obj.config.save()
 
-    def ui_command_save(self, apply=False):
-        self.obj.config.save(apply=apply)
-        return True
+    def ui_command_save(self):
+        return self.obj.config.save()
+
+    def ui_command_apply(self):
+        return self.obj.config.save(apply=True)
 
     def ui_command_down(self, reset=False):
         return self.obj.ifdown(reset=reset)

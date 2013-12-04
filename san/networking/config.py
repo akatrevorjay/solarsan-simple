@@ -16,21 +16,24 @@ import os
 import sh
 
 
-
 def get_iface(name):
     return pynetlinux.ifconfig.Interface(name)
 
 
-def get_ifup_ifaces():
+def list_ifaces():
+    for x in netifaces.interfaces():
+        yield x
+
+
+def list_ifup_ifaces():
     with open('/run/network/ifstate', 'rb') as f:
         for line in f.readlines():
             line = line.rstrip('\n')
-            if not line:
-                continue
-            yield line.split('=', 1)[0]
+            if line:
+                yield line.split('=', 1)[0]
 
 
-def get_configured_ifaces():
+def list_configured_ifaces():
     aug = Augeas(flags=Augeas.NO_MODL_AUTOLOAD)
     aug.add_transform('interfaces', '/etc/network/interfaces')
     aug.load()
@@ -41,12 +44,9 @@ def get_configured_ifaces():
 
 
 def is_iface_ifup(name):
-    match_name = '%s=%s' % (name, name)
-    with open('/run/network/ifstate', 'rb') as f:
-        for line in f.readlines():
-            line = line.rstrip('\n')
-            if line == match_name:
-                return True
+    for iface in list_ifup_ifaces():
+        if iface == name:
+            return True
     return False
 
 
@@ -491,14 +491,8 @@ class Nic(ReprMixIn):
 
     @classmethod
     def list(cls):
-        ret = {}
         for x in netifaces.interfaces():
-            try:
-                ret[x] = Nic(x)
-            except:
-                pass
-        #return dict([(x, lambda Nic(x) except: None) for x in netifaces.interfaces()])
-        return ret
+            yield Nic(x)
 
 
 def get_all_local_ipv4_addrs(nics=None, lo=False):
