@@ -4,6 +4,7 @@ Exceptions
 """
 
 import logging
+from contextlib import contextmanager
 
 
 class FormattedException(Exception):
@@ -26,3 +27,11 @@ class LoggedException(FormattedException):
         if args:
             logging.exception(*args)
         super(LoggedException, self).__init__(*args, **kwargs)
+
+
+@contextmanager
+def ignored(*exceptions):
+    try:
+        yield
+    except exceptions:
+        pass
