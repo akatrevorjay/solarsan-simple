@@ -1,6 +1,6 @@
 
 from .base import ConfigNode
-from pyzfscore.zfs import ZPool, ZDataset, ZFilesystem, ZVolume, ZSnapshot
+from ..storage import ZPool, ZDataset, ZFilesystem, ZVolume, ZSnapshot
 
 
 class Pools(ConfigNode):
