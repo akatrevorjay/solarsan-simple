@@ -5,6 +5,8 @@ log = logging.getLogger(__name__)
 import os
 from uuid import uuid4
 
+from .. import conf
+
 from ..utils.exceptions import FormattedException, ignored
 from ..storage import ZVolume
 

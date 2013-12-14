@@ -1,7 +1,7 @@
 
-from solarsan import logging
-logger = logging.getLogger(__name__)
-from solarsan import conf
+import logging
+log = logging.getLogger(__name__)
+from .. import conf
 import sh
 import sysfs
 
@@ -479,7 +479,7 @@ def reload_config(force=False):
     args = []
     if force:
         args.append('-force')
-    args.extend(['-noprompt', '-config', conf.scst_config_file])
+    args.extend(['-noprompt', '-config', conf.SCST_CONFIG_FILE])
     sh.scstadmin(*args)
     return True
 

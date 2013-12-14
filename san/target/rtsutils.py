@@ -1,5 +1,5 @@
 
-from solarsan.utils.files import fread
+from ..utils.files import fread
 import re
 import os
 import stat
