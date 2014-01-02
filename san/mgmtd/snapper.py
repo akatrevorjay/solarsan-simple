@@ -56,6 +56,7 @@ class DeletionHandler(threading.Thread):
         self._q = OrderedSetQueue()
 
     def mark_for_deletion(self, dataset_name, snapshot_name, recursive=False):
+        # TODO What if an item is added to the queue during deletion?
         log.info('Adding to deletion queue: %s@%s recursive=%s',
                  dataset_name,
                  snapshot_name,
@@ -72,7 +73,7 @@ class DeletionHandler(threading.Thread):
                      name,
                      recursive)
 
-            # TODO Exception handling
+            # TODO Exception handling (ie check if it exists first)
             # TODO Retry later if exists (ie if locked)
             dataset = ZDataset.open(dataset_name)
             dataset.destroy_snapshot(snapshot_name, recursive=recursive)
@@ -206,9 +207,9 @@ def main():
         sched = Schedule.from_conf(name, conf, deletion_handler)
         sched.schedule_next()
 
-    deletion_handler.daemon = True
+    #deletion_handler.daemon = True
     deletion_handler.start()
-    #deletion_handler.join(
+    deletion_handler.join()
     #deletion_handler._q.join()
 
 if __name__ == '__main__':
