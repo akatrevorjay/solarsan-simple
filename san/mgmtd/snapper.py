@@ -66,6 +66,12 @@ class SnapperSchedule(object):
     def __init__(self):
         pass
 
+    def __repr__(self):
+        return '<%s %s every=%ss>' % (
+            self.__class__.__name__,
+            self.name,
+            self.every_secs)
+
     @classmethod
     def from_conf(cls, s, name, conf):
         self = cls()
