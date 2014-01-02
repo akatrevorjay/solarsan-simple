@@ -57,19 +57,19 @@ class DeletionHandler(threading.Thread):
 
     def mark_for_deletion(self, dataset_name, snapshot_name, recursive=False):
         # TODO What if an item is added to the queue during deletion?
-        log.info('Adding to deletion queue: %s@%s recursive=%s',
-                 dataset_name,
-                 snapshot_name,
-                 recursive)
+        log.debug('Adding to deletion queue: %s@%s recursive=%s',
+                  dataset_name,
+                  snapshot_name,
+                  recursive)
         self._q.put((dataset_name, snapshot_name, recursive))
 
     def run(self):
-        log.info('Deletion queue running delay=%s.', self.delay)
+        log.debug('Deletion queue running delay=%s.', self.delay)
         while True:
             dataset_name, snapshot_name, recursive = self._q.get()
             name = '%s@%s' % (dataset_name, snapshot_name)
 
-            log.info('Deletion queue got %s recursive=%s',
+            log.info('Destroying snapshot in deletion queue %s recursive=%s',
                      name,
                      recursive)
 
@@ -154,6 +154,7 @@ class Schedule(object):
 
         # Create snap
         log.info('Creating snapshot %s@%s', self.dataset_name, snapshot_name)
+        # TODO Exception handling
         dataset.snapshot(snapshot_name, recursive=self.recursive)
 
         # Get dataset again so it shows the created snapshot
@@ -164,7 +165,7 @@ class Schedule(object):
                          if x.snapshot_name.startswith(prefix)]
         # Reverse so newest are first
         matched_snaps.reverse()
-        log.debug('matched_snaps=%s', matched_snaps)
+        #log.debug('matched_snaps=%s', matched_snaps)
         #unmatched_snaps = set(all_snaps) - set(matched_snaps)
         #log.info('unmatched_snaps=%s', unmatched_snaps)
 
@@ -174,7 +175,7 @@ class Schedule(object):
         delete_snaps = matched_snaps[self.keep:]
         delete_snaps.reverse()
         for snap in delete_snaps:
-            log.info('Destroying obsolete snapshot %s', snap)
+            log.info('Marking snapshot for deletion: %s', snap.name)
             self.deletion_handler.mark_for_deletion(dataset_name=snap.parent_name,
                                                     snapshot_name=snap.snapshot_name,
                                                     recursive=self.recursive)
@@ -207,7 +208,7 @@ def main():
         sched = Schedule.from_conf(name, conf, deletion_handler)
         sched.schedule_next()
 
-    #deletion_handler.daemon = True
+    deletion_handler.daemon = True
     deletion_handler.start()
     deletion_handler.join()
     #deletion_handler._q.join()
