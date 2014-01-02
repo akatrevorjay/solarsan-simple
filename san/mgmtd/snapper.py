@@ -8,6 +8,10 @@ from san.conf import config
 from san.storage import ZPool, ZDataset, ZFilesystem, ZVolume, ZSnapshot
 
 from datetime import datetime, timedelta
+import time
+import threading
+
+from .ordered_set_queue import OrderedSetQueue
 
 
 # Periodic snapshot of datasets
@@ -24,33 +28,60 @@ snapshot_conf = dict(
         every=timedelta(seconds=5),
     ),
     insanest=dict(
-        every=timedelta(seconds=1),
+        every=timedelta(seconds=30),
     ),
-    frequent=dict(
-        snapshot_name='15m',
-        every=timedelta(minutes=15),
-    ),
-    hourly=dict(
-        every=timedelta(hours=1),
-    ),
-    daily=dict(
-        every=timedelta(days=1),
-    ),
+
+    #frequent=dict(
+    #    snapshot_name='15m',
+    #    every=timedelta(minutes=15),
+    #),
+    #hourly=dict(
+    #    every=timedelta(hours=1),
+    #),
+    #daily=dict(
+    #    every=timedelta(days=1),
+    #),
     #monthly=dict(
     #    every=timedelta(months=1),
     #),
 )
 
 
-#from queue import Queue
-#deletion_queue = Queue()
+class DeletionHandler(threading.Thread):
+    delay = 1
+
+    def __init__(self):
+        threading.Thread.__init__(self)
+        #self._q = Queue()
+        self._q = OrderedSetQueue()
+
+    def mark_for_deletion(self, dataset_name, snapshot_name, recursive=False):
+        log.info('Adding to deletion queue: %s@%s recursive=%s',
+                 dataset_name,
+                 snapshot_name,
+                 recursive)
+        self._q.put((dataset_name, snapshot_name, recursive))
+
+    def run(self):
+        log.info('Deletion queue running delay=%s.', self.delay)
+        while True:
+            dataset_name, snapshot_name, recursive = self._q.get()
+            name = '%s@%s' % (dataset_name, snapshot_name)
+
+            log.info('Deletion queue got %s recursive=%s',
+                     name,
+                     recursive)
+
+            # TODO Exception handling
+            # TODO Retry later if exists (ie if locked)
+            dataset = ZDataset.open(dataset_name)
+            dataset.destroy_snapshot(snapshot_name, recursive=recursive)
+
+            self._q.task_done()
+            time.sleep(self.delay)
 
 
-import time
-import sched
-
-
-class SnapperSchedule(object):
+class Schedule(object):
     name = None
     snapshot_name = None
     every = None
@@ -73,14 +104,15 @@ class SnapperSchedule(object):
             self.every_secs)
 
     @classmethod
-    def from_conf(cls, s, name, conf):
+    def from_conf(cls, name, conf, deletion_handler):
         self = cls()
-        self._scheduler = s
         self.name = name
         self.snapshot_name = conf.get('snapshot_name', name)
         self.every = conf['every']
         self.dataset_name = conf['dataset']
         self.keep = conf['keep']
+
+        self.deletion_handler = deletion_handler
         return self
 
     @property
@@ -135,21 +167,29 @@ class SnapperSchedule(object):
         #unmatched_snaps = set(all_snaps) - set(matched_snaps)
         #log.info('unmatched_snaps=%s', unmatched_snaps)
 
-        for snap in matched_snaps[self.keep:]:
+        # TODO Keep snapshots to be deleted in a queue backed by persistent
+        # storage, if snapshot deletion fails, try again later, unless it does
+        # not exist.
+        delete_snaps = matched_snaps[self.keep:]
+        delete_snaps.reverse()
+        for snap in delete_snaps:
             log.info('Destroying obsolete snapshot %s', snap)
-            dataset.destroy_snapshot(snap.snapshot_name, recursive=self.recursive)
+            self.deletion_handler.mark_for_deletion(dataset_name=snap.parent_name,
+                                                    snapshot_name=snap.snapshot_name,
+                                                    recursive=self.recursive)
 
         self.schedule_next()
 
     def schedule_next(self):
         secs = self.every_secs
-        pri = self.priority
-        log.debug('Scheduling next run for %s in %ss with pri=%s', self, secs, pri)
-        self._scheduler.enter(secs, pri, self.run, ())
+        log.debug('Scheduling next run for %s in %ss', self, secs)
+        self._timer = threading.Timer(secs, self.run)
+        self._timer.daemon = True
+        self._timer.start()
 
 
 def main():
-    s = sched.scheduler(time.time, time.sleep)
+    deletion_handler = DeletionHandler()
 
     default = snapshot_conf['default']
 
@@ -163,11 +203,13 @@ def main():
 
         log.debug('Schedule %s full_conf=%s', name, conf)
 
-        snapshot_sched = SnapperSchedule.from_conf(s, name, conf)
-        snapshot_sched.schedule_next()
+        sched = Schedule.from_conf(name, conf, deletion_handler)
+        sched.schedule_next()
 
-    s.run()
-
+    deletion_handler.daemon = True
+    deletion_handler.start()
+    #deletion_handler.join(
+    #deletion_handler._q.join()
 
 if __name__ == '__main__':
     main()
