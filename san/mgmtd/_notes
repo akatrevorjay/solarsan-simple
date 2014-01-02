@@ -1,0 +1,9 @@
+
+ZFS Backups Proper
+    - Integrate snapshotting into backup procedure
+    - Never use recursive replication, replicate one snap at a time incrementals for each dataset
+    - Problem can exist during initial sync
+        - Move to always doing a full sync via disk hand-offs if it will take longer than a day.
+    - Queue up snapshot deletions, only run them in between snapshot replications
+        - Always create snapshots however
+    - Run as a daemon, caching data as needed to help ;)
