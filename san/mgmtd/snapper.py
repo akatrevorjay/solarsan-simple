@@ -138,7 +138,7 @@ class Schedule(object):
         for v in format_strs:
             v = v.format(**fmt)
             if self.strftime:
-                v = time.strftime(v)
+                v = time.strftime(v, self._format_dt.timetuple())
             ret.append(v)
         return ret
 
@@ -147,6 +147,9 @@ class Schedule(object):
 
     def run(self):
         log.info('Running %s', self)
+
+        # Set datetime to format towards
+        self._format_dt = datetime.now()
 
         self.create_snapshot()
         self.cleanup_old_snapshots()
@@ -202,13 +205,14 @@ def main():
     for name in snapshot_conf:
         if name == 'default':
             continue
-        log.info('Schedule %s=%s', name, snapshot_conf[name])
+        log.debug('Creating schedule %s=%s', name, snapshot_conf[name])
 
         conf = default.copy()
         conf.update(snapshot_conf[name])
 
         log.debug('Schedule %s full_conf=%s', name, conf)
 
+        log.info('Adding schedule %s', name)
         sched = Schedule.from_conf(name, conf, deletion_handler)
         sched.schedule_next()
 
