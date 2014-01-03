@@ -73,8 +73,10 @@ class DeletionHandler(threading.Thread):
                      name,
                      recursive)
 
+            # TODO Keep snapshots to be deleted in a queue backed by persistent
+            # storage, if snapshot deletion fails, try again later, unless it does
+            # not exist. (ie if locked)
             # TODO Exception handling (ie check if it exists first)
-            # TODO Retry later if exists (ie if locked)
             dataset = ZDataset.open(dataset_name)
             dataset.destroy_snapshot(snapshot_name, recursive=recursive)
 
@@ -146,16 +148,24 @@ class Schedule(object):
     def run(self):
         log.info('Running %s', self)
 
-        dataset = self.get_dataset()
+        self.create_snapshot()
+        self.cleanup_old_snapshots()
+
+        # Schedule next run
+        self.schedule_next()
+
+    def create_snapshot(self):
         prefix, suffix = self._format_snapshot_name()
         snapshot_name = '%s%s' % (prefix, suffix)
 
-        log.info('dataset=%s, snapshot_name=%s', dataset, snapshot_name)
-
-        # Create snap
         log.info('Creating snapshot %s@%s', self.dataset_name, snapshot_name)
+
         # TODO Exception handling
+        dataset = self.get_dataset()
         dataset.snapshot(snapshot_name, recursive=self.recursive)
+
+    def cleanup_old_snapshots(self):
+        prefix, _ = self._format_snapshot_name()
 
         # Get dataset again so it shows the created snapshot
         dataset = self.get_dataset()
@@ -165,22 +175,16 @@ class Schedule(object):
                          if x.snapshot_name.startswith(prefix)]
         # Reverse so newest are first
         matched_snaps.reverse()
-        #log.debug('matched_snaps=%s', matched_snaps)
-        #unmatched_snaps = set(all_snaps) - set(matched_snaps)
-        #log.info('unmatched_snaps=%s', unmatched_snaps)
 
-        # TODO Keep snapshots to be deleted in a queue backed by persistent
-        # storage, if snapshot deletion fails, try again later, unless it does
-        # not exist.
         delete_snaps = matched_snaps[self.keep:]
+        # Reverse so oldest are deleted first
         delete_snaps.reverse()
+
         for snap in delete_snaps:
             log.info('Marking snapshot for deletion: %s', snap.name)
             self.deletion_handler.mark_for_deletion(dataset_name=snap.parent_name,
                                                     snapshot_name=snap.snapshot_name,
                                                     recursive=self.recursive)
-
-        self.schedule_next()
 
     def schedule_next(self):
         secs = self.every_secs
@@ -210,7 +214,7 @@ def main():
 
     deletion_handler.daemon = True
     deletion_handler.start()
-    deletion_handler.join()
+    #deletion_handler.join()
     #deletion_handler._q.join()
 
 if __name__ == '__main__':
