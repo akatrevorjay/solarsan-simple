@@ -60,14 +60,6 @@ class DatasetSet(object):
 
     def common_snaps(self, previous_to=None):
         snaps = set(self.source.snaps_names) & set(self.destination.snaps_names)
-        if previous_to:
-            previous_to_snapshot_index = self.source.snaps_names.index(previous_to)
-            # TODO This indexes the common snaps twice when previous_to is
-            # specified, why?
-            indexes = self.source.index_snaps_names(snaps)
-            for k, v in indexes.iteritems():
-                if v > previous_to_snapshot_index:
-                    snaps.remove(k)
         return snaps
 
     def find_latest_common_snap(self, previous_to=None):
@@ -82,11 +74,21 @@ class DatasetSet(object):
 
     def find_latest_snap_not_in_destination(self):
         snaps = self.snaps_not_in_destination()
+
+        latest_common_snap = self.find_latest_common_snap()
+        latest_common_snap_idx = self.source.snaps_names.index(latest_common_snap)
+
+        indexes = self.source.index_snaps_names(snaps)
+        for k, v in indexes.iteritems():
+            if v < latest_common_snap_idx:
+                snaps.remove(k)
+
         return self.source.find_latest_snap_in(snaps)
 
     def send_latest_snap_not_in_destination(self):
         snap_name = self.find_latest_snap_not_in_destination()
-        return self.send(snap_name)
+        if snap_name:
+            return self.send(snap_name)
 
     def send(self, snapshot_name):
         log.info('Preparing for send of snapshot %s', snapshot_name)
