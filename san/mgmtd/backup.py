@@ -18,7 +18,6 @@ from .async_file_reader import AsynchronousFileLogger
 
 
 class Dataset(object):
-    re_filter = re.compile('^auto-(daily|weekly|monthly|insane|insanest)-')
 
     def __init__(self, name):
         self.name = name
@@ -27,13 +26,9 @@ class Dataset(object):
         if self.exists:
             self.snaps = self.zdataset.iter_snapshots_sorted()
             self.snaps_names = [x.snapshot_name for x in self.snaps]
-            self.filtered_snaps = [x for x in self.snaps if self.re_filter.match(x.snapshot_name)]
-            self.filtered_snaps_names = [x.snapshot_name for x in self.filtered_snaps]
         else:
             self.snaps = list()
             self.snaps_names = list()
-            self.filtered_snaps = list()
-            self.filtered_snaps_names = list()
 
     def index_snaps_names(self, snaps_names):
         return collections.Counter(
@@ -62,8 +57,19 @@ class DatasetSet(object):
     def snaps_difference(self):
         return set(self.source.snaps_names) - set(self.destination.snaps_names)
 
-    def snaps_needed_by_destination(self):
+    destination_snaps_needed_filter = re.compile('^auto-(daily|weekly|monthly|insane|insanest|trevorj)-')
+
+    def snaps_needed_by_destination(self, filter=True):
         snaps = self.snaps_difference()
+        if filter:
+            #log.info('Snaps needed by destination before culling: %s', snaps)
+            # Filter snaps according to above filter, this way we don't end up
+            # relying on snaps that aren't kept very long
+            snaps = [x for x in snaps if self.destination_snaps_needed_filter.match(x)]
+            # TODO WTF Why does a RE match automatically anchor itself and
+            # require .* prefix??
+            #snaps = [x for x in snaps if re.match('.*trevor', x)]
+            #log.info('Snaps needed by destination before culling after filter: %s', snaps)
 
         common_snaps = self.snaps_intersect()
         latest_common_snap = self.source.find_latest_snap_in(common_snaps)
