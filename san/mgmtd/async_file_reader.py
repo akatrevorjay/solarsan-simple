@@ -46,7 +46,10 @@ class AsynchronousFileLogger(threading.Thread):
         '''The body of the tread: read lines and put them on the queue.'''
         for line in iter(self._fd.readline, ''):
             line = line.rstrip("\n")
-            self._logger.info('%s: %s', self._log_prefix, repr(line))
+            self._logger.info('%s: %s', self._log_prefix,
+                              #repr(line),
+                              line,
+                              )
 
     def eof(self):
         '''Check whether there is no more content to expect.'''
