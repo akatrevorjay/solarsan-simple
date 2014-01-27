@@ -19,6 +19,28 @@ from .ordered_set import OrderedSet
 from .async_file_reader import AsynchronousFileReader
 
 
+class AsynchronousFileReaderLogger(threading.Thread):
+    def __init__(self, fd, log_prefix):
+        assert callable(fd.readline)
+        threading.Thread.__init__(self)
+        self._fd = fd
+        self._q = Queue.Queue()
+        self._reader = AsynchronousFileReader(self._fd, self._q)
+        self._reader.start()
+
+    def run(self):
+        '''The body of the tread: read lines and put them on the queue.'''
+        while not self._reader.eof():
+            while not self._q.empty():
+                line = self._q.get()
+                line = line.rstrip("\n")
+                log.info('%s: %s', self._log_prefix, repr(line))
+
+    def eof(self):
+        '''Check whether there is no more content to expect.'''
+        return self._reader.eof()
+
+
 class Dataset(object):
     def __init__(self, name):
         self.name = name
@@ -63,7 +85,7 @@ class DatasetSet(object):
         psend_stderr_reader = AsynchronousFileReader(psend.stderr, psend_stderr_q)
         psend_stderr_reader.start()
 
-        cmd_recv = ['/sbin/zfs', 'receive', '-nvF', self.destination.name]
+        cmd_recv = ['/sbin/zfs', 'receive', '-nvFd', self.destination.name]
         log.info('Spawning recv: %s', cmd_recv)
         precv = subprocess.Popen(cmd_recv,
                                  bufsize=pbufsize,
@@ -116,7 +138,7 @@ class DatasetSet(object):
             #time.sleep(1)
 
         # Give async readers a second to catch up, matters on say broken pipes
-        log.info('Sleeping for async readers')
+        #log.info('Sleeping for async readers')
         time.sleep(0.1)
         check_async_readers()
 
@@ -131,12 +153,12 @@ class DatasetSet(object):
         precv_stdout_reader.join()
         precv_stderr_reader.join()
 
-        log.info('Closing async reader FDs')
-        psend.stderr.close()
-        precv.stdout.close()
-        precv.stderr.close()
+        #log.info('Closing async reader FDs')
+        #psend.stderr.close()
+        #precv.stdout.close()
+        #precv.stderr.close()
 
-        log.info('Checking async readers one last time')
+        #log.info('Checking async readers one last time')
         time.sleep(0.1)
         check_async_readers()
 
@@ -145,7 +167,7 @@ class DatasetSet(object):
         psend.wait()
 
 
-ds = DatasetSet('dpool/tmp/omg', 'dpool/tmp/omg_dest')
+ds = DatasetSet('dpool/tmp/omg', 'dpool/dest')
 source = ds.source
 destination = ds.destination
 
