@@ -29,6 +29,30 @@ class AsynchronousFileReader(threading.Thread):
         return not self.is_alive() and self._queue.empty()
 
 
+class AsynchronousFileLogger(threading.Thread):
+    '''
+    Helper class to implement asynchronous reading of a file
+    in a separate thread. Logs read lines.
+    '''
+
+    def __init__(self, fd, logger, log_prefix):
+        assert callable(fd.readline)
+        threading.Thread.__init__(self)
+        self._fd = fd
+        self._logger = logger
+        self._log_prefix = log_prefix
+
+    def run(self):
+        '''The body of the tread: read lines and put them on the queue.'''
+        for line in iter(self._fd.readline, ''):
+            line = line.rstrip("\n")
+            self._logger.info('%s: %s', self._log_prefix, repr(line))
+
+    def eof(self):
+        '''Check whether there is no more content to expect.'''
+        return not self.is_alive()
+
+
 def consume(command):
     '''
     Example of how to consume standard output and standard error of

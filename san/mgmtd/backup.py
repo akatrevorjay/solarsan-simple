@@ -16,7 +16,7 @@ import zmq
 
 from .ordered_set import OrderedSet
 #from .ordered_set_queue import OrderedSetQueue
-from .async_file_reader import AsynchronousFileReader
+from .async_file_reader import AsynchronousFileReader, AsynchronousFileLogger
 
 
 class AsynchronousFileReaderLogger(threading.Thread):
@@ -25,6 +25,7 @@ class AsynchronousFileReaderLogger(threading.Thread):
         threading.Thread.__init__(self)
         self._fd = fd
         self._q = Queue.Queue()
+        self._log_prefix = log_prefix
         self._reader = AsynchronousFileReader(self._fd, self._q)
         self._reader.start()
 
@@ -81,8 +82,7 @@ class DatasetSet(object):
                                  stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE,
                                  )
-        psend_stderr_q = Queue.Queue()
-        psend_stderr_reader = AsynchronousFileReader(psend.stderr, psend_stderr_q)
+        psend_stderr_reader = AsynchronousFileLogger(psend.stderr, log, 'send_stderr')
         psend_stderr_reader.start()
 
         cmd_recv = ['/sbin/zfs', 'receive', '-nvFd', self.destination.name]
@@ -93,30 +93,12 @@ class DatasetSet(object):
                                  stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE,
                                  )
-        precv_stdout_q = Queue.Queue()
-        precv_stdout_reader = AsynchronousFileReader(precv.stdout, precv_stdout_q)
+        precv_stdout_reader = AsynchronousFileLogger(precv.stdout, log, 'recv_stdout')
         precv_stdout_reader.start()
-        precv_stderr_q = Queue.Queue()
-        precv_stderr_reader = AsynchronousFileReader(precv.stderr, precv_stderr_q)
+        precv_stderr_reader = AsynchronousFileLogger(precv.stderr, log, 'recv_stderr')
         precv_stderr_reader.start()
 
-        def check_async_readers():
-            while not psend_stderr_q.empty():
-                line = psend_stderr_q.get()
-                line = line.rstrip("\n")
-                log.info('psend_stderr: %s', repr(line))
-            while not precv_stdout_q.empty():
-                line = precv_stdout_q.get()
-                line = line.rstrip("\n")
-                log.info('precv_stdout: %s', repr(line))
-            while not precv_stderr_q.empty():
-                line = precv_stderr_q.get()
-                line = line.rstrip("\n")
-                log.info('precv_stderr: %s', repr(line))
-
         while True:
-            check_async_readers()
-
             try:
                 buf = psend.stdout.read(bufsize)
             except IOError:
@@ -137,11 +119,6 @@ class DatasetSet(object):
             #log.info('Sleeping')
             #time.sleep(1)
 
-        # Give async readers a second to catch up, matters on say broken pipes
-        #log.info('Sleeping for async readers')
-        time.sleep(0.1)
-        check_async_readers()
-
         log.info('Closing send stdout')
         psend.stdout.close()
 
@@ -157,10 +134,6 @@ class DatasetSet(object):
         #psend.stderr.close()
         #precv.stdout.close()
         #precv.stderr.close()
-
-        #log.info('Checking async readers one last time')
-        time.sleep(0.1)
-        check_async_readers()
 
         log.info('Waiting for procs to end')
         precv.wait()
