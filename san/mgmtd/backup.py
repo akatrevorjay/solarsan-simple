@@ -9,40 +9,14 @@ from san.storage import ZPool, ZDataset, ZFilesystem, ZVolume, ZSnapshot
 
 #from datetime import datetime, timedelta
 #import time
+import re
+import collections
 import threading
 import subprocess
 import Queue
 #import zmq
 
-#from .ordered_set import OrderedSet
-#from .ordered_set_queue import OrderedSetQueue
-from .async_file_reader import AsynchronousFileReader, AsynchronousFileLogger
-
-
-class AsynchronousFileReaderLogger(threading.Thread):
-    def __init__(self, fd, log_prefix):
-        assert callable(fd.readline)
-        threading.Thread.__init__(self)
-        self._fd = fd
-        self._q = Queue.Queue()
-        self._log_prefix = log_prefix
-        self._reader = AsynchronousFileReader(self._fd, self._q)
-        self._reader.start()
-
-    def run(self):
-        '''The body of the tread: read lines and put them on the queue.'''
-        while not self._reader.eof():
-            while not self._q.empty():
-                line = self._q.get()
-                line = line.rstrip("\n")
-                log.info('%s: %s', self._log_prefix, repr(line))
-
-    def eof(self):
-        '''Check whether there is no more content to expect.'''
-        return self._reader.eof()
-
-import re
-import collections
+from .async_file_reader import AsynchronousFileLogger
 
 
 class Dataset(object):
@@ -53,8 +27,6 @@ class Dataset(object):
         self.zdataset = ZDataset.open(name)
         self.exists = self.zdataset is not None
         if self.exists:
-            #self.snaps = OrderedSet(self.zdataset.iter_snapshots_sorted())
-            #self.snaps = self.zdataset.iter_snapshots_sorted(objectify=False)
             self.snaps = self.zdataset.iter_snapshots_sorted()
             self.snaps_names = [x.snapshot_name for x in self.snaps]
             self.filtered_snaps = [x for x in self.snaps if self.re_filter.match(x.snapshot_name)]
@@ -86,30 +58,29 @@ class DatasetSet(object):
         self.source = Dataset(source)
         self.destination = Dataset(destination)
 
-    def common_snaps(self):
-        return set(self.source.snaps_names) & set(self.destination.snaps_names)
+    def common_snaps(self, previous_to=None):
+        snaps = set(self.source.snaps_names) & set(self.destination.snaps_names)
+        if previous_to:
+            previous_to_snapshot_index = self.source.snaps_names.index(previous_to)
+            # TODO This indexes the common snaps twice when previous_to is
+            # specified, why?
+            indexes = self.source.index_snaps_names(snaps)
+            for k, v in indexes.iteritems():
+                if v > previous_to_snapshot_index:
+                    snaps.remove(k)
+        return snaps
 
-    def common_filtered_snaps(self):
-        return set(self.source.filtered_snaps_names) & set(self.destination.filtered_snaps_names)
-
-    def find_latest_common_snap(self):
-        # This will only work if we remove entries that have an index that is
-        # greater than the snap we're sending
-        snaps = self.common_snaps()
+    def find_latest_common_snap(self, previous_to=None):
+        snaps = self.common_snaps(previous_to=previous_to)
+        log.info('Previously indexed common snaps: %s', snaps)
+        # TODO This indexes the common snaps twice when previous_to is
+        # specified, why?
         return self.source.find_latest_snap_in(snaps)
-
-    def find_latest_common_filtered_snap(self):
-        snaps = self.common_filtered_snaps()
-        return self.source.find_latest_snap_in(snaps)
-
-    def filtered_snaps_not_in_destination(self):
-        return set(self.source.filtered_snaps_names) - set(self.destination.filtered_snaps_names)
 
     def snaps_not_in_destination(self):
         return set(self.source.snaps_names) - set(self.destination.snaps_names)
 
     def find_latest_snap_not_in_destination(self):
-        #snaps = self.filtered_snaps_not_in_destination()
         snaps = self.snaps_not_in_destination()
         return self.source.find_latest_snap_in(snaps)
 
@@ -118,19 +89,19 @@ class DatasetSet(object):
         return self.send(snap_name)
 
     def send(self, snapshot_name):
-        log.info('Starting send of snapshot %s', snapshot_name)
+        log.info('Preparing for send of snapshot %s', snapshot_name)
         source_snapshot = self.source.zdataset.open_child_snapshot(snapshot_name)
         source_snapshot_index = self.source.snaps_names.index(snapshot_name)
 
-        common_snaps = self.common_snaps()
-        common_snaps_indexes = self.source.index_snaps_names(common_snaps)
-        for k, v in common_snaps_indexes.iteritems():
-            if v > source_snapshot_index:
-                common_snaps.remove(k)
-        log.info('Previously indexed common snaps: %s', common_snaps)
-
-        latest_common_snapshot_name = self.source.find_latest_snap_in(common_snaps)
+        latest_common_snapshot_name = self.find_latest_common_snap()
+        latest_common_snapshot_index = self.source.snaps_names.index(latest_common_snapshot_name)
         log.info('Latest common snapshot: %s', latest_common_snapshot_name)
+
+        # Check if we're trying to send a snapshot that's actually previous to
+        # the latest common snapshot.
+        if latest_common_snapshot_index > source_snapshot_index:
+            log.info('Source snapshot is previous to latest common snapshot')
+            return
 
         incremental = bool(latest_common_snapshot_name)
         log.info('Incremental: %s', incremental)
