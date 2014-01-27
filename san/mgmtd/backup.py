@@ -41,8 +41,13 @@ class AsynchronousFileReaderLogger(threading.Thread):
         '''Check whether there is no more content to expect.'''
         return self._reader.eof()
 
+import re
+import collections
+
 
 class Dataset(object):
+    re_filter = re.compile('^auto-(daily|weekly|monthly|insane|insanest)-')
+
     def __init__(self, name):
         self.name = name
         self.zdataset = ZDataset.open(name)
@@ -50,13 +55,24 @@ class Dataset(object):
         if self.exists:
             #self.snaps = OrderedSet(self.zdataset.iter_snapshots_sorted())
             #self.snaps = self.zdataset.iter_snapshots_sorted(objectify=False)
-            self.snaps_list = set(self.zdataset.iter_snapshots_sorted())
-            self.snaps = set(self.snaps_list)
-            self.snaps_names = set([x.snapshot_name for x in self.snaps])
+            self.snaps = self.zdataset.iter_snapshots_sorted()
+            self.snaps_names = [x.snapshot_name for x in self.snaps]
+            self.filtered_snaps = [x for x in self.snaps if self.re_filter.match(x.snapshot_name)]
+            self.filtered_snaps_names = [x.snapshot_name for x in self.filtered_snaps]
         else:
-            self.snaps_list = set()
-            self.snaps = set()
-            self.snaps_names = set()
+            self.snaps = list()
+            self.snaps_names = list()
+            self.filtered_snaps = list()
+            self.filtered_snaps_names = list()
+
+    def index_snaps_names(self, snaps_names):
+        return collections.Counter(
+            {k: self.snaps_names.index(k) for k in snaps_names}
+        )
+
+    def order_snaps_names(self, snaps_names):
+        indexes = self.index_snaps_names(snaps_names)
+        return sorted(indexes, key=lambda x: indexes[x])
 
 
 class DatasetSet(object):
@@ -65,17 +81,44 @@ class DatasetSet(object):
         self.destination = Dataset(destination)
 
     def common_snaps(self):
-        return self.source.snaps_names & self.destination.snaps_names
+        return set(self.source.snaps_names) & set(self.destination.snaps_names)
 
-    def snaps_not_in_destination(self):
-        return self.source.snaps_names - self.destination.snaps_names
+    def find_latest_common_snap(self):
+        snaps = self.common_snaps()
+        indexes = self.source.index_snaps_names(snaps)
+        top = indexes.most_common(1)
+        if top:
+            return top[0][0]
+
+    def filtered_snaps_not_in_destination(self):
+        return set(self.source.filtered_snaps_names) - set(self.destination.filtered_snaps_names)
+
+    def find_latest_snap_not_in_destination(self):
+        snaps = self.filtered_snaps_not_in_destination()
+        indexes = self.source.index_snaps_names(snaps)
+        top = indexes.most_common(1)
+        if top:
+            return top[0][0]
+
+    def send_latest_snap_not_in_destination(self):
+        snap_name = self.find_latest_snap_not_in_destination()
+        return self.send(snap_name)
 
     def send(self, snapshot_name):
+        log.info('Starting send of snapshot %s', snapshot_name)
         source_snapshot = self.source.zdataset.open_child_snapshot(snapshot_name)
+
+        latest_common_snapshot_name = self.find_latest_common_snap()
+        log.info('Latest common snapshot: %s', latest_common_snapshot_name)
+        incremental = bool(latest_common_snapshot_name)
+        log.info('Incremental: %s', incremental)
 
         bufsize = pbufsize = 4096
 
-        cmd_send = ['/sbin/zfs', 'send', '-RpPv', source_snapshot.name]
+        if incremental:
+            cmd_send = ['/sbin/zfs', 'send', '-pPv', '-i', latest_common_snapshot_name, source_snapshot.name]
+        else:
+            cmd_send = ['/sbin/zfs', 'send', '-pPv', source_snapshot.name]
         log.info('Spawning send: %s', cmd_send)
         psend = subprocess.Popen(cmd_send,
                                  bufsize=pbufsize,
@@ -85,7 +128,8 @@ class DatasetSet(object):
         psend_stderr_reader = AsynchronousFileLogger(psend.stderr, log, 'send_stderr')
         psend_stderr_reader.start()
 
-        cmd_recv = ['/sbin/zfs', 'receive', '-nvFd', self.destination.name]
+        cmd_recv = ['/sbin/zfs', 'receive', '-vFu', self.destination.name]
+        #cmd_recv = ['/sbin/zfs', 'receive', '-vFdu', self.destination.name]
         log.info('Spawning recv: %s', cmd_recv)
         precv = subprocess.Popen(cmd_recv,
                                  bufsize=pbufsize,
