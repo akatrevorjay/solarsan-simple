@@ -94,17 +94,18 @@ class DatasetSet(object):
         source_snapshot_index = self.source.snaps_names.index(snapshot_name)
 
         latest_common_snapshot_name = self.find_latest_common_snap()
-        latest_common_snapshot_index = self.source.snaps_names.index(latest_common_snapshot_name)
-        log.info('Latest common snapshot: %s', latest_common_snapshot_name)
-
-        # Check if we're trying to send a snapshot that's actually previous to
-        # the latest common snapshot.
-        if latest_common_snapshot_index > source_snapshot_index:
-            log.info('Source snapshot is previous to latest common snapshot')
-            return
-
         incremental = bool(latest_common_snapshot_name)
         log.info('Incremental: %s', incremental)
+
+        if incremental:
+            latest_common_snapshot_index = self.source.snaps_names.index(latest_common_snapshot_name)
+            log.info('Latest common snapshot: %s', latest_common_snapshot_name)
+
+            # Check if we're trying to send a snapshot that's actually previous to
+            # the latest common snapshot.
+            if latest_common_snapshot_index > source_snapshot_index:
+                log.info('Source snapshot is previous to latest common snapshot')
+                return
 
         bufsize = pbufsize = 4096
 
