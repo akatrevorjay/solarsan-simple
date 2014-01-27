@@ -4,17 +4,17 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
-from san.conf import config
+#from san.conf import config
 from san.storage import ZPool, ZDataset, ZFilesystem, ZVolume, ZSnapshot
 
-from datetime import datetime, timedelta
-import time
+#from datetime import datetime, timedelta
+#import time
 import threading
 import subprocess
 import Queue
-import zmq
+#import zmq
 
-from .ordered_set import OrderedSet
+#from .ordered_set import OrderedSet
 #from .ordered_set_queue import OrderedSetQueue
 from .async_file_reader import AsynchronousFileReader, AsynchronousFileLogger
 
@@ -74,6 +74,12 @@ class Dataset(object):
         indexes = self.index_snaps_names(snaps_names)
         return sorted(indexes, key=lambda x: indexes[x])
 
+    def find_latest_snap_in(self, snaps_names):
+        indexes = self.index_snaps_names(snaps_names)
+        top = indexes.most_common(1)
+        if top:
+            return top[0][0]
+
 
 class DatasetSet(object):
     def __init__(self, source, destination):
@@ -83,22 +89,29 @@ class DatasetSet(object):
     def common_snaps(self):
         return set(self.source.snaps_names) & set(self.destination.snaps_names)
 
+    def common_filtered_snaps(self):
+        return set(self.source.filtered_snaps_names) & set(self.destination.filtered_snaps_names)
+
     def find_latest_common_snap(self):
+        # This will only work if we remove entries that have an index that is
+        # greater than the snap we're sending
         snaps = self.common_snaps()
-        indexes = self.source.index_snaps_names(snaps)
-        top = indexes.most_common(1)
-        if top:
-            return top[0][0]
+        return self.source.find_latest_snap_in(snaps)
+
+    def find_latest_common_filtered_snap(self):
+        snaps = self.common_filtered_snaps()
+        return self.source.find_latest_snap_in(snaps)
 
     def filtered_snaps_not_in_destination(self):
         return set(self.source.filtered_snaps_names) - set(self.destination.filtered_snaps_names)
 
+    def snaps_not_in_destination(self):
+        return set(self.source.snaps_names) - set(self.destination.snaps_names)
+
     def find_latest_snap_not_in_destination(self):
-        snaps = self.filtered_snaps_not_in_destination()
-        indexes = self.source.index_snaps_names(snaps)
-        top = indexes.most_common(1)
-        if top:
-            return top[0][0]
+        #snaps = self.filtered_snaps_not_in_destination()
+        snaps = self.snaps_not_in_destination()
+        return self.source.find_latest_snap_in(snaps)
 
     def send_latest_snap_not_in_destination(self):
         snap_name = self.find_latest_snap_not_in_destination()
@@ -107,9 +120,18 @@ class DatasetSet(object):
     def send(self, snapshot_name):
         log.info('Starting send of snapshot %s', snapshot_name)
         source_snapshot = self.source.zdataset.open_child_snapshot(snapshot_name)
+        source_snapshot_index = self.source.snaps_names.index(snapshot_name)
 
-        latest_common_snapshot_name = self.find_latest_common_snap()
+        common_snaps = self.common_snaps()
+        common_snaps_indexes = self.source.index_snaps_names(common_snaps)
+        for k, v in common_snaps_indexes.iteritems():
+            if v > source_snapshot_index:
+                common_snaps.remove(k)
+        log.info('Previously indexed common snaps: %s', common_snaps)
+
+        latest_common_snapshot_name = self.source.find_latest_snap_in(common_snaps)
         log.info('Latest common snapshot: %s', latest_common_snapshot_name)
+
         incremental = bool(latest_common_snapshot_name)
         log.info('Incremental: %s', incremental)
 
