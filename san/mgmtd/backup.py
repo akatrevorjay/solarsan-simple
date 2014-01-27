@@ -11,9 +11,7 @@ from san.storage import ZPool, ZDataset, ZFilesystem, ZVolume, ZSnapshot
 #import time
 import re
 import collections
-import threading
 import subprocess
-import Queue
 #import zmq
 
 from .async_file_reader import AsynchronousFileLogger
@@ -58,24 +56,17 @@ class DatasetSet(object):
         self.source = Dataset(source)
         self.destination = Dataset(destination)
 
-    def common_snaps(self, previous_to=None):
-        snaps = set(self.source.snaps_names) & set(self.destination.snaps_names)
-        return snaps
+    def snaps_intersect(self):
+        return set(self.source.snaps_names) & set(self.destination.snaps_names)
 
-    def find_latest_common_snap(self, previous_to=None):
-        snaps = self.common_snaps(previous_to=previous_to)
-        log.info('Previously indexed common snaps: %s', snaps)
-        # TODO This indexes the common snaps twice when previous_to is
-        # specified, why?
-        return self.source.find_latest_snap_in(snaps)
-
-    def snaps_not_in_destination(self):
+    def snaps_difference(self):
         return set(self.source.snaps_names) - set(self.destination.snaps_names)
 
-    def find_latest_snap_not_in_destination(self):
-        snaps = self.snaps_not_in_destination()
+    def snaps_needed_by_destination(self):
+        snaps = self.snaps_difference()
 
-        latest_common_snap = self.find_latest_common_snap()
+        common_snaps = self.snaps_intersect()
+        latest_common_snap = self.source.find_latest_snap_in(common_snaps)
         latest_common_snap_idx = self.source.snaps_names.index(latest_common_snap)
 
         indexes = self.source.index_snaps_names(snaps)
@@ -83,19 +74,23 @@ class DatasetSet(object):
             if v < latest_common_snap_idx:
                 snaps.remove(k)
 
-        return self.source.find_latest_snap_in(snaps)
+        return snaps
 
-    def send_latest_snap_not_in_destination(self):
-        snap_name = self.find_latest_snap_not_in_destination()
-        if snap_name:
-            return self.send(snap_name)
+    def send_latest_snap_needed_by_destination(self):
+        snaps = self.snaps_needed_by_destination()
+        latest_snap = self.source.find_latest_snap_in(snaps)
+        if latest_snap:
+            return self.send(latest_snap)
+        else:
+            log.info('Up to date! =)')
 
     def send(self, snapshot_name):
         log.info('Preparing for send of snapshot %s', snapshot_name)
         source_snapshot = self.source.zdataset.open_child_snapshot(snapshot_name)
         source_snapshot_index = self.source.snaps_names.index(snapshot_name)
 
-        latest_common_snapshot_name = self.find_latest_common_snap()
+        common_snaps = self.snaps_intersect()
+        latest_common_snapshot_name = self.source.find_latest_snap_in(common_snaps)
         incremental = bool(latest_common_snapshot_name)
         log.info('Incremental: %s', incremental)
 
