@@ -79,19 +79,25 @@ def main():
 
     while True:
         buf = rtr.recv_multipart()
-        log.info('got %s', repr(buf))
+        #log.info('got %s', repr(buf))
         peer_id = buf[0]
+
+        log.info('Peer %s sent %s',
+                 repr(peer_id),
+                 repr(buf[1]))
 
         if peer_id != 'cli':
             continue
 
-        if buf[1] == 'receive':
+        if buf[1] == 'receive_open':
             name = buf[2]
             rtr.send_multipart([peer_id, 'ok'])
 
         if buf[1] == 'receive_data':
             data = buf[2]
 
+        if buf[1] == 'receive_close':
+            rtr.send_multipart([peer_id, 'ok'])
 
 
 if __name__ == '__main__':

@@ -54,6 +54,28 @@ def main():
         log.info('Full to %s',
                  repr(latest_snap_needed))
 
+    ## Connect to ZMQ ROUTER
+
+    ctx = zmq.Context()
+    rtr = ctx.socket(zmq.ROUTER)
+    rtr.setsockopt(zmq.IDENTITY, 'cli')
+    rtr.connect('tcp://localhost:4243')
+
+    # TODO Wait to ensure connectivity, temporary, really needs to be a loop
+    # around hello until timeout.
+    time.sleep(5)
+
+    # Say Hello
+    rtr.send_multipart(['srv', 'receive_open', source.name])
+
+    # Expect hello response
+    buf = rtr.recv_multipart()
+    if buf[1] != 'ok':
+        log.error('Did not get OK reply')
+        return
+
+    ## Spawn up ZFS send
+
     bufsize = pbufsize = 4096
 
     if incremental:
@@ -74,21 +96,6 @@ def main():
     psend_stderr_reader = AsynchronousFileLogger(psend.stderr, log, 'send_stderr')
     psend_stderr_reader.start()
 
-
-    ctx = zmq.Context()
-    rtr = ctx.socket(zmq.ROUTER)
-    rtr.setsockopt(zmq.IDENTITY, 'cli')
-    rtr.connect('tcp://localhost:4243')
-
-    time.sleep(5)
-
-    rtr.send_multipart(['srv', 'receive', source.name])
-
-    buf = rtr.recv_multipart()
-    if buf[1] != 'ok':
-        log.error('Did not get OK reply')
-        return
-
     while True:
         try:
             buf = psend.stdout.read(bufsize)
@@ -108,6 +115,16 @@ def main():
 
         #log.info('Sleeping')
         #time.sleep(1)
+
+    ## Say Goodbye
+    rtr.send_multipart(['srv', 'receive_close'])
+
+    ## Expect response from Goodbye
+    buf = rtr.recv_multipart()
+    if buf[1] == 'ok':
+        log.info('Got OK from receive')
+
+    ## Cleanup
 
     log.info('Closing send stdout')
     psend.stdout.close()
