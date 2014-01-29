@@ -19,22 +19,6 @@ from .backup import Dataset, DatasetSet
 def receive(self, name, from_snap, to_snap):
     dest = self._get_dest(name)
 
-    bufsize = pbufsize = 4096
-
-    cmd_recv = ['/sbin/zfs', 'receive', '-vFu', dest.name]
-    #cmd_recv = ['/sbin/zfs', 'receive', '-vFdu', self.dest.name]
-    log.info('Spawning recv: %s', cmd_recv)
-    precv = subprocess.Popen(cmd_recv,
-                                bufsize=pbufsize,
-                                stdin=subprocess.PIPE,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE,
-                                )
-    precv_stdout_reader = AsynchronousFileLogger(precv.stdout, log, 'recv_stdout')
-    precv_stdout_reader.start()
-    precv_stderr_reader = AsynchronousFileLogger(precv.stderr, log, 'recv_stderr')
-    precv_stderr_reader.start()
-
 
 class Dispatcher(object):
     def __init__(self):
@@ -90,13 +74,57 @@ def main():
             continue
 
         if buf[1] == 'receive_open':
-            name = buf[2]
+            #name = buf[2]
+            name = 'dpool/dest'
+
+            ## Spawn receive process
+
+            bufsize = pbufsize = 4096
+
+            cmd_recv = ['/sbin/zfs', 'receive', '-nvFu', name]
+            log.info('Spawning recv: %s', cmd_recv)
+            precv = subprocess.Popen(cmd_recv,
+                                        bufsize=pbufsize,
+                                        stdin=subprocess.PIPE,
+                                        stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE,
+                                        )
+            precv_stdout_reader = AsynchronousFileLogger(precv.stdout, log, 'recv_stdout')
+            precv_stdout_reader.start()
+            precv_stderr_reader = AsynchronousFileLogger(precv.stderr, log, 'recv_stderr')
+            precv_stderr_reader.start()
+
             rtr.send_multipart([peer_id, 'ok'])
 
         if buf[1] == 'receive_data':
-            data = buf[2]
+            try:
+                precv.stdin.write(buf[2])
+                precv.stdin.flush()
+            except IOError:
+                log.error('Broken pipe on recv')
+
+
 
         if buf[1] == 'receive_close':
+            try:
+                precv.stdin.flush()
+            except IOError:
+                log.error('Broken pipe on recv')
+
+            log.info('Closing recv stdin')
+            precv.stdin.close()
+
+            log.info('Waiting for async reader threads to join')
+            precv_stdout_reader.join()
+            precv_stderr_reader.join()
+
+            #log.info('Closing async reader FDs')
+            #precv.stdout.close()
+            #precv.stderr.close()
+
+            log.info('Waiting for procs to end')
+            precv.wait()
+
             rtr.send_multipart([peer_id, 'ok'])
 
 
