@@ -8,8 +8,10 @@ log = logging.getLogger(__name__)
 from san.storage import ZPool, ZDataset, ZFilesystem, ZVolume, ZSnapshot
 
 #import zmq
+import subprocess
 import zerorpc
 
+from .async_file_reader import AsynchronousFileLogger
 from .backup import Dataset, DatasetSet
 
 
@@ -35,6 +37,26 @@ class BackupRPC(object):
         snaps = ds.snaps_needed_by_dest()
         latest_snap = ds.source.find_latest_snap_in(snaps)
         return latest_snap
+
+    def receive(self, name, from_snap, to_snap):
+        dest = self._get_dest(name)
+
+        bufsize = pbufsize = 4096
+
+        cmd_recv = ['/sbin/zfs', 'receive', '-vFu', dest.name]
+        #cmd_recv = ['/sbin/zfs', 'receive', '-vFdu', self.dest.name]
+        log.info('Spawning recv: %s', cmd_recv)
+        precv = subprocess.Popen(cmd_recv,
+                                 bufsize=pbufsize,
+                                 stdin=subprocess.PIPE,
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE,
+                                 )
+        precv_stdout_reader = AsynchronousFileLogger(precv.stdout, log, 'recv_stdout')
+        precv_stdout_reader.start()
+        precv_stderr_reader = AsynchronousFileLogger(precv.stderr, log, 'recv_stderr')
+        precv_stderr_reader.start()
+
 
     """ Development/Testing """
 
