@@ -6,6 +6,8 @@ log = logging.getLogger(__name__)
 
 import subprocess
 import zerorpc
+import zmq
+import time
 
 #from san.conf import config
 from san.storage import ZPool, ZDataset, ZFilesystem, ZVolume, ZSnapshot
@@ -72,6 +74,21 @@ def main():
     psend_stderr_reader = AsynchronousFileLogger(psend.stderr, log, 'send_stderr')
     psend_stderr_reader.start()
 
+
+    ctx = zmq.Context()
+    rtr = ctx.socket(zmq.ROUTER)
+    rtr.setsockopt(zmq.IDENTITY, 'cli')
+    rtr.connect('tcp://localhost:4243')
+
+    time.sleep(5)
+
+    rtr.send_multipart(['srv', 'receive', source.name])
+
+    buf = rtr.recv_multipart()
+    if buf[1] != 'ok':
+        log.error('Did not get OK reply')
+        return
+
     while True:
         try:
             buf = psend.stdout.read(bufsize)
@@ -84,10 +101,7 @@ def main():
             break
 
         try:
-            # TODO write to receive
-            #precv.stdin.write(buf)
-            #precv.stdin.flush()
-            pass
+            rtr.send_multipart(['srv', 'receive_data', buf])
         except IOError:
             log.error('Broken pipe on recv')
             break

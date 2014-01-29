@@ -10,6 +10,7 @@ from san.storage import ZPool, ZDataset, ZFilesystem, ZVolume, ZSnapshot
 #import zmq
 import subprocess
 import zerorpc
+import zmq
 
 from .async_file_reader import AsynchronousFileLogger
 from .backup import Dataset, DatasetSet
